@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+# set -o pipefail
+
+set -x
+
+oc get project lws-llamacpp-test || oc new-project lws-llamacpp-test
+oc get sa llama-sa || oc create sa llama-sa && oc adm policy add-scc-to-user anyuid -z llama-sa
+
+oc apply --server-side -f ../../k8s/lws-ocp.yaml
+
+# Wait for the leader pod to be running, it will take about 5 minutes at the first time when the image is not exist on the node.
+oc wait --for=condition=ready pod llamacpp-llama3-8b-instruct-bartowski-q5km-0 --timeout=600s
+# Export the IP
+IP=$(oc get po llamacpp-llama3-8b-instruct-bartowski-q5km-0 -o jsonpath='{.status.podIPs[0].ip}')
+kubectl run clichat --image=quay.io/rhn_support_qili/clichat:latest --rm=true -it --image-pull-policy=IfNotPresent --env=LLM_ENDPOINT="http://${IP}:8080"
